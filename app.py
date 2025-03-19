@@ -1,4 +1,5 @@
 import base64
+import gc
 import io
 
 import numpy as np
@@ -8,8 +9,15 @@ from PIL import Image
 
 app = Flask(__name__, template_folder="templates")
 
+tf.keras.backend.clear_session()
+
 model = tf.keras.models.load_model("model.keras")
-labels = [str(i) for i in range(10)] + [chr(i) for i in range(ord("A"), ord("Z") + 1)]
+
+decoder = (
+    [str(i) for i in range(10)]
+    + [chr(i) for i in range(65, 91)]
+    + [chr(i) for i in range(97, 123)]
+)
 
 
 def preprocess_image(image_data):
@@ -18,8 +26,8 @@ def preprocess_image(image_data):
 
     image = image.resize((128, 128))
     image_array = np.array(image) / 255.0
-    image_array = image_array.reshape(1, 128, 128, 1)
-    return image_array
+    image_array = image_array.reshape(128, 128, 1)
+    return np.expand_dims(image_array, axis=0)
 
 
 @app.route("/")
@@ -41,9 +49,14 @@ def predict():
         predictions = model.predict(processed_image)
 
         print("Raw Predictions:", predictions)
+        print("Shape of Predictions:", predictions.shape)
 
         predicted_index = np.argmax(predictions)
-        predicted_character = labels[predicted_index]
+
+        if predicted_index >= len(decoder):
+            return jsonify({"error": "Index out of bounds for decoder"}), 500
+
+        predicted_character = decoder[predicted_index]
 
         print(
             f"Predicted Index: {predicted_index}, Predicted Character: {predicted_character}"
